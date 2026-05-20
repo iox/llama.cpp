@@ -1407,9 +1407,23 @@ static void ggml_backend_meta_buffer_clear(ggml_backend_buffer_t buffer, uint8_t
 }
 
 static void ggml_backend_meta_buffer_reset(ggml_backend_buffer_t buffer) {
+    GGML_ASSERT(ggml_backend_buffer_is_meta(buffer));
+    ggml_backend_meta_buffer_context * buf_ctx = (ggml_backend_meta_buffer_context *) buffer->context;
     const size_t n_buffers = ggml_backend_meta_buffer_n_bufs(buffer);
+    const bool reset_meta_ctx = ggml_backend_buffer_get_usage(buffer) == GGML_BACKEND_BUFFER_USAGE_COMPUTE;
     for (size_t i = 0; i < n_buffers; i++) {
         ggml_backend_buffer_reset(ggml_backend_meta_buffer_simple_buffer(buffer, i));
+        if (reset_meta_ctx) {
+            // Debugging aid: with ctx = buf_ctx->buf_configs[i].ctx,
+            // used_mib = double(ggml_used_mem(ctx))/(1024.0*1024.0),
+            // and similarly for ggml_get_mem_size(ctx).
+            ggml_reset(buf_ctx->buf_configs[i].ctx);
+        }
+    }
+    if (reset_meta_ctx) {
+        // Before this reset, used_mib was observed to grow continuously between graph rebuilds.
+        buf_ctx->simple_tensors.clear();
+        buf_ctx->split_state_cache.clear();
     }
 }
 
@@ -1435,7 +1449,7 @@ static ggml_backend_buffer_t ggml_backend_meta_buffer_type_alloc_buffer(ggml_bac
     const size_t n_simple_bufts = ggml_backend_meta_buft_n_bufts(buft);
 
     ggml_init_params params = {
-        /*.mem_size   =*/ 1024*1024*1024, // FIXME
+        /*.mem_size   =*/ 1024*1024*1024 + 112,
         /*.mem_buffer =*/ nullptr,
         /*.no_alloc   =*/ true,
     };
@@ -1456,7 +1470,7 @@ struct ggml_backend_buffer * ggml_backend_meta_alloc_ctx_tensors_from_buft(struc
     const size_t n_simple_bufts = ggml_backend_meta_buft_n_bufts(buft);
 
     ggml_init_params params = {
-        /*.mem_size   =*/ 1024*1024*1024, // FIXME
+        /*.mem_size   =*/ 1024*1024*1024 + 112,
         /*.mem_buffer =*/ nullptr,
         /*.no_alloc   =*/ true,
     };
